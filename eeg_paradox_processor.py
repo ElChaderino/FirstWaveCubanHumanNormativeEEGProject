@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 EEG Paradox Rapid Reporter - Cuban Normative Database Processor
-Enhanced for Clinical QEEG Analysis (Jay Gunkelman & Mark Jones Standards)
+Enhanced for Clinical QEEG Analysis (Jay Gunkelman & Mark Jones & Jay Gattis Standards)
 Processes Cuban EEG normative data to create comprehensive clinical QEEG database
 """
 
@@ -48,7 +48,7 @@ class CubanEEGProcessor:
             'gamma': (30.0, 44.0)
         }
         
-        # Clinical frequency bands (Gunkelman/Jones standard)
+        # Clinical frequency bands (Gunkelman/Jones/Gattis standard)
         self.clinical_bands = {
             'delta': (0.5, 3.5),
             'theta': (4.0, 7.5),
@@ -204,7 +204,7 @@ class CubanEEGProcessor:
         return band_powers
     
     def calculate_clinical_metrics(self, power_spectra):
-        """Calculate clinical QEEG metrics (Gunkelman/Jones standard)"""
+        """Calculate clinical QEEG metrics (Gunkelman/Jones/Gattis standard)"""
         clinical_metrics = {}
         
         # 1. Peak Alpha Frequency (PAF)
@@ -728,7 +728,7 @@ class CubanEEGProcessor:
 def main():
     """Main processing function"""
     print("🚀 EEG Paradox Rapid Reporter - Clinical QEEG Database Processor")
-    print("Enhanced for Jay Gunkelman & Mark Jones Clinical Standards")
+    print("Enhanced for Jay Gunkelman & Mark Jones & Gattis Clinical Standards")
     print("=" * 80)
     
     # Initialize processor
@@ -781,4 +781,5 @@ def main():
     return processor, z_score_df, clinical_summary_df, normative_df
 
 if __name__ == "__main__":
+
     processor, z_scores, clinical_summary, normative = main()
