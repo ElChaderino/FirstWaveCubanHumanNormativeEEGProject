@@ -1,0 +1,83 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2025 EEG Paradox Clinical System Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+================================================================================
+EEG PARADOX CLINICAL SYSTEM - PROTOTYPE CONCEPT
+================================================================================
+
+🧠 PROTOTYPE DISCLAIMER - READ CAREFULLY 🧠
+
+This is a PROTOTYPE CONCEPT system developed for educational and research
+purposes. This software is NOT intended for clinical diagnosis or treatment
+of patients without proper validation and regulatory approval.
+
+⚠️  IMPORTANT CLINICAL WARNINGS ⚠️
+
+• This is EXPERIMENTAL SOFTWARE - use at your own risk
+• NOT FDA approved or medically validated for clinical use
+• Results should NOT be used for patient diagnosis without professional validation
+• All clinical interpretations require qualified healthcare professional oversight
+• Cuban normative database integration is for research purposes only
+
+🔬 RESEARCH AND EDUCATIONAL USE 🔬
+
+This prototype implements established QEEG methodologies and research protocols
+for educational demonstration and research validation. The system showcases
+advanced EEG analysis techniques and Cuban normative database integration
+following published academic standards.
+
+🚀 PROTOTYPE FEATURES 🚀
+
+• Advanced QEEG analysis algorithms
+• Cuban normative database integration
+• Professional-grade topographical mapping
+• Clinical significance analysis
+• Hemispheric asymmetry detection
+• Coherence analysis capabilities
+• Z-score normalization techniques
+
+⚡ DEVELOPMENT STATUS ⚡
+
+This is PROTOTYPE software under active development. Features may change,
+algorithms may be updated, and clinical interpretations should be validated
+against established clinical systems before any medical application.
+
+🛡️ LIABILITY DISCLAIMER 🛡️
+
+The developers, contributors, and distributors of this software assume NO
+responsibility for any clinical decisions, patient outcomes, or medical
+consequences resulting from the use of this prototype system. Users assume
+full responsibility for validation and appropriate use.
+
+📊 DATA PRIVACY 📊
+
+This prototype may process EEG data. Users are responsible for ensuring
+compliance with applicable privacy laws (HIPAA, GDPR, etc.) and obtaining
+appropriate patient consent for any data processing.
+
+🔧 TECHNICAL DISCLAIMER 🔧
+
+This prototype software may contain bugs, incomplete features, or experimental
+algorithms. The code is provided "as is" without warranty of any kind.
+Performance and accuracy are not guaranteed for clinical applications.
+
+================================================================================
+
+For the full GPL v3 license text, see: https://www.gnu.org/licenses/gpl-3.0.html
+
+Contact: For research collaborations and clinical validation inquiries.

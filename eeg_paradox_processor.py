@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 EEG Paradox Rapid Reporter - Cuban Normative Database Processor
-Enhanced for Clinical QEEG Analysis (Jay Gunkelman & Mark Jones & Jay Gattis Standards)
+Enhanced for Clinical QEEG Analysis (Jay Gunkelman & Mark Jones Standards)
 Processes Cuban EEG normative data to create comprehensive clinical QEEG database
 """
 
@@ -48,7 +48,7 @@ class CubanEEGProcessor:
             'gamma': (30.0, 44.0)
         }
         
-        # Clinical frequency bands (Gunkelman/Jones/Gattis standard)
+        # Clinical frequency bands (Gunkelman/Jones standard)
         self.clinical_bands = {
             'delta': (0.5, 3.5),
             'theta': (4.0, 7.5),
@@ -204,7 +204,7 @@ class CubanEEGProcessor:
         return band_powers
     
     def calculate_clinical_metrics(self, power_spectra):
-        """Calculate clinical QEEG metrics (Gunkelman/Jones/Gattis standard)"""
+        """Calculate clinical QEEG metrics (Gunkelman/Jones standard)"""
         clinical_metrics = {}
         
         # 1. Peak Alpha Frequency (PAF)
@@ -279,6 +279,15 @@ class CubanEEGProcessor:
                 data['band_powers'] = self.calculate_band_powers(data['power_spectra'])
                 data['clinical_metrics'] = self.calculate_clinical_metrics(data['power_spectra'])
                 
+                # NEW: Advanced QEEG features
+                data['asymmetry'] = self.compute_asymmetry(data['band_powers'])
+                data['alpha_peak_hz'] = self.compute_alpha_peak(data['power_spectra'], self.frequencies)
+                
+                # NEW: Coherence features
+                coh_spec = self.compute_coherence_spectra(data['MCross_gsf'])
+                data['coherence_spectra'] = coh_spec
+                data['band_coherence'] = self.band_coherence(coh_spec)
+                
                 self.subjects_data[subject_id] = data
         
         # Process Eyes Open data
@@ -295,6 +304,15 @@ class CubanEEGProcessor:
                 data['power_spectra'] = self.extract_power_spectra(data['MCross_gsf'])
                 data['band_powers'] = self.calculate_band_powers(data['power_spectra'])
                 data['clinical_metrics'] = self.calculate_clinical_metrics(data['power_spectra'])
+                
+                # NEW: Advanced QEEG features
+                data['asymmetry'] = self.compute_asymmetry(data['band_powers'])
+                data['alpha_peak_hz'] = self.compute_alpha_peak(data['power_spectra'], self.frequencies)
+                
+                # NEW: Coherence features
+                coh_spec = self.compute_coherence_spectra(data['MCross_gsf'])
+                data['coherence_spectra'] = coh_spec
+                data['band_coherence'] = self.band_coherence(coh_spec)
                 
                 self.subjects_data[subject_id] = data
         
@@ -330,6 +348,12 @@ class CubanEEGProcessor:
             all_band_powers = {band: [] for band in self.freq_bands.keys()}
             all_clinical_metrics = {metric: [] for metric in ['peak_alpha_freq', 'theta_beta_ratio', 'beta_alpha_ratio']}
             
+            # NEW: Advanced QEEG feature collectors
+            pairs = self._all_pairs()
+            all_asymmetry = {band: [] for band in self.freq_bands.keys()}
+            all_alpha_peaks = []
+            all_band_coh = {band: [] for band in self.clinical_bands.keys()}
+            
             for subject in subjects:
                 all_power_spectra.append(subject['power_spectra'])
                 for band in all_band_powers:
@@ -339,6 +363,22 @@ class CubanEEGProcessor:
                 for metric in all_clinical_metrics:
                     if metric in subject['clinical_metrics']:
                         all_clinical_metrics[metric].append(subject['clinical_metrics'][metric])
+                
+                # NEW: Advanced QEEG features
+                # Asymmetry
+                for band in all_asymmetry:
+                    if band in subject['asymmetry']:
+                        # Convert dict to list in consistent order
+                        asym_values = list(subject['asymmetry'][band].values())
+                        all_asymmetry[band].append(asym_values)
+                
+                # Alpha peak
+                all_alpha_peaks.append(subject['alpha_peak_hz'])
+                
+                # Coherence per band
+                for band in all_band_coh:
+                    if band in subject['band_coherence']:
+                        all_band_coh[band].append(subject['band_coherence'][band])
             
             # Convert to numpy arrays
             all_power_spectra = np.array(all_power_spectra)  # (n_subjects, 19, 49)
@@ -353,7 +393,16 @@ class CubanEEGProcessor:
                 'band_powers_mean': {},
                 'band_powers_std': {},
                 'clinical_metrics_mean': {},
-                'clinical_metrics_std': {}
+                'clinical_metrics_std': {},
+                
+                # NEW: Advanced QEEG normative stats
+                'asymmetry_mean': {},
+                'asymmetry_std': {},
+                'alpha_peak_mean': np.nan,
+                'alpha_peak_std': np.nan,
+                'band_coherence_mean': {},
+                'band_coherence_std': {},
+                'coherence_pairs': [(a, b) for a, b, _, _ in pairs]
             }
             
             for band in all_band_powers:
@@ -366,6 +415,28 @@ class CubanEEGProcessor:
                     metric_data = np.array(all_clinical_metrics[metric])  # (n_subjects, 19)
                     self.normative_data[age_group]['clinical_metrics_mean'][metric] = np.mean(metric_data, axis=0)
                     self.normative_data[age_group]['clinical_metrics_std'][metric] = np.std(metric_data, axis=0)
+            
+            # NEW: Advanced QEEG normative statistics
+            # Asymmetry
+            for band in all_asymmetry:
+                if all_asymmetry[band]:
+                    asym_data = np.array(all_asymmetry[band])  # (n_subjects, n_pairs)
+                    self.normative_data[age_group]['asymmetry_mean'][band] = np.nanmean(asym_data, axis=0)
+                    self.normative_data[age_group]['asymmetry_std'][band] = np.nanstd(asym_data, axis=0)
+            
+            # Alpha peak
+            if all_alpha_peaks:
+                alpha_array = np.array([x for x in all_alpha_peaks if np.isfinite(x)])
+                if alpha_array.size > 0:
+                    self.normative_data[age_group]['alpha_peak_mean'] = float(np.mean(alpha_array))
+                    self.normative_data[age_group]['alpha_peak_std'] = float(np.std(alpha_array))
+            
+            # Coherence
+            for band in all_band_coh:
+                if all_band_coh[band]:
+                    coh_data = np.array(all_band_coh[band])  # (n_subjects, n_pairs)
+                    self.normative_data[age_group]['band_coherence_mean'][band] = np.nanmean(coh_data, axis=0)
+                    self.normative_data[age_group]['band_coherence_std'][band] = np.nanstd(coh_data, axis=0)
         
         print(f"✅ Created normative database for {len(self.normative_data)} age groups")
     
@@ -405,12 +476,44 @@ class CubanEEGProcessor:
                 z_scores_clinical[metric] = (subject_data['clinical_metrics'][metric] - 
                                             normative['clinical_metrics_mean'][metric]) / normative['clinical_metrics_std'][metric]
         
+        # NEW: Advanced QEEG z-scores
+        # Asymmetry z-scores
+        z_scores_asym = {}
+        if 'asymmetry_mean' in normative:
+            for band, mu in normative['asymmetry_mean'].items():
+                if band in subject_data['asymmetry']:
+                    sd = normative['asymmetry_std'][band]
+                    subj = list(subject_data['asymmetry'][band].values())
+                    z = (np.array(subj) - mu) / (sd + 1e-12)
+                    z_scores_asym[band] = z
+        
+        # Alpha peak z-score
+        alpha_z = np.nan
+        if 'alpha_peak_mean' in normative and np.isfinite(normative['alpha_peak_mean']):
+            mu = normative['alpha_peak_mean']
+            sd = normative['alpha_peak_std']
+            if np.isfinite(subject_data['alpha_peak_hz']):
+                alpha_z = (subject_data['alpha_peak_hz'] - mu) / (sd + 1e-12)
+        
+        # Coherence z-scores by band
+        z_scores_coh = {}
+        if 'band_coherence_mean' in normative:
+            for band, mu in normative['band_coherence_mean'].items():
+                if band in subject_data['band_coherence']:
+                    sd = normative['band_coherence_std'][band]
+                    subj = subject_data['band_coherence'][band]
+                    z = (subj - mu) / (sd + 1e-12)
+                    z_scores_coh[band] = z
+        
         return {
             'age_group': age_group,
             'condition': condition,
             'z_scores_spectra': z_scores_spectra,
             'z_scores_bands': z_scores_bands,
-            'z_scores_clinical': z_scores_clinical
+            'z_scores_clinical': z_scores_clinical,
+            'z_scores_asymmetry': z_scores_asym,
+            'alpha_peak_z': alpha_z,
+            'z_scores_coherence': z_scores_coh
         }
     
     def classify_abnormality(self, z_score):
@@ -425,6 +528,347 @@ class CubanEEGProcessor:
             return 'Severely Abnormal'
         else:
             return 'Unknown'
+
+    # ===== Clinical Summary v2 & Compact Metrics =================================
+
+    def _band_order(self):
+        """Keep clinical order"""
+        return ['delta', 'theta', 'alpha', 'beta', 'gamma']
+
+    def _severity_buckets(self, arr):
+        """Return counts for |z| >= 1.5, 2.0, 2.58."""
+        a = np.asarray(arr, float)
+        valid_vals = a[np.isfinite(a)]
+        if valid_vals.size == 0:
+            return {'n_ge_1p5': 0, 'n_ge_2p0': 0, 'n_ge_2p58': 0}
+        az = np.abs(valid_vals)
+        return {
+            'n_ge_1p5': int(np.sum(az >= 1.5)),
+            'n_ge_2p0': int(np.sum(az >= 2.0)),
+            'n_ge_2p58': int(np.sum(az >= 2.58)),
+        }
+
+    def _band_summary(self, band, zs, electrodes):
+        """Return mean z, hotspot (site,z) for a band."""
+        mean_z = float(np.nanmean(zs))
+        # hotspot
+        if zs.size and not np.all(np.isnan(zs)):
+            abs_zs = np.abs(zs)
+            valid_mask = np.isfinite(abs_zs)
+            if np.any(valid_mask):
+                i = int(np.nanargmax(abs_zs))
+                site = electrodes[i]
+                z = float(zs[i])
+            else:
+                site, z = None, np.nan
+        else:
+            site, z = None, np.nan
+        return {
+            'band': band,
+            'mean_z': mean_z,
+            'hotspot_site': site,
+            'hotspot_z': z,
+            'class': self.classify_abnormality(mean_z) if np.isfinite(mean_z) else 'Unknown'
+        }
+
+    def _headline(self, buckets, top_site, top_band, top_z):
+        sev = buckets['n_ge_2p58'] > 0
+        abn = buckets['n_ge_2p0']  > 0
+        bdr = buckets['n_ge_1p5']  > 0
+        if sev:
+            tag = "SEVERE"
+        elif abn:
+            tag = "ABNORMAL"
+        elif bdr:
+            tag = "BORDERLINE"
+        else:
+            tag = "WITHIN NORMAL LIMITS"
+        if np.isfinite(top_z):
+            return f"{tag} — peak |z|={abs(top_z):.2f} at {top_site} ({top_band})"
+        return tag
+
+    def build_clinical_summary_v2(self, subject_id, subject_data, z_scores):
+        """
+        Produce a compact, clinician-ready summary for a single subject.
+        """
+        electrodes = self.electrodes
+
+        # Collect all band z-s for the subject (19 values per band)
+        band_z = {}
+        for band in self._band_order():
+            if band in z_scores['z_scores_bands']:
+                band_z[band] = np.asarray(z_scores['z_scores_bands'][band], float)
+        all_vals = np.concatenate([v for v in band_z.values()]) if band_z else np.array([])
+
+        buckets = self._severity_buckets(all_vals) if all_vals.size else {'n_ge_1p5':0,'n_ge_2p0':0,'n_ge_2p58':0}
+
+        # Band-wise summaries and overall top hotspot
+        band_rows = []
+        top_site = None; top_band = None; top_z = np.nan
+        for band in self._band_order():
+            if band not in band_z: 
+                continue
+            row = self._band_summary(band, band_z[band], electrodes)
+            band_rows.append(row)
+            if np.isfinite(row['hotspot_z']) and (not np.isfinite(top_z) or abs(row['hotspot_z']) > abs(top_z)):
+                top_site, top_band, top_z = row['hotspot_site'], row['band'], row['hotspot_z']
+
+        # Clinical metrics (z means across channels)
+        paf_z = np.nan; tbr_cz = np.nan; tbr_cz_z = np.nan
+        if 'peak_alpha_freq' in z_scores['z_scores_clinical']:
+            paf_z = float(np.nanmean(z_scores['z_scores_clinical']['peak_alpha_freq']))
+        if 'theta_beta_ratio' in z_scores['z_scores_clinical']:
+            # prefer Cz spotlight if available
+            try:
+                cz_idx = electrodes.index('Cz')
+                tbr_cz = float(subject_data['clinical_metrics']['theta_beta_ratio'][cz_idx])
+                tbr_cz_z = float(z_scores['z_scores_clinical']['theta_beta_ratio'][cz_idx])
+            except Exception:
+                tbr_cz = float(np.nanmean(subject_data['clinical_metrics']['theta_beta_ratio']))
+                tbr_cz_z = float(np.nanmean(z_scores['z_scores_clinical']['theta_beta_ratio']))
+
+        summary = {
+            'subject_id': subject_id,
+            'condition' : z_scores['condition'],
+            'age'       : subject_data['age'],
+            'sex'       : 'Male' if subject_data['sex']==1 else 'Female',
+            'age_group' : z_scores['age_group'],
+
+            # Global load
+            'n_sites_ge_1p5' : buckets['n_ge_1p5'],
+            'n_sites_ge_2p0' : buckets['n_ge_2p0'],
+            'n_sites_ge_2p58': buckets['n_ge_2p58'],
+
+            # Overall peak
+            'peak_site' : top_site,
+            'peak_band' : top_band,
+            'peak_z'    : top_z,
+
+            # Spotlight metrics
+            'paf_z_mean'        : paf_z,
+            'paf_class'         : self.classify_abnormality(paf_z) if np.isfinite(paf_z) else 'Unknown',
+            'theta_beta_Cz'     : tbr_cz,
+            'theta_beta_Cz_z'   : tbr_cz_z,
+            'theta_beta_Cz_class': self.classify_abnormality(tbr_cz_z) if np.isfinite(tbr_cz_z) else 'Unknown',
+
+            # Headline
+            'headline' : self._headline(buckets, top_site, top_band, top_z),
+
+            # Band table (returned as a list for downstream CSV expansion)
+            'bands'    : band_rows
+        }
+        return summary
+
+    def clinical_summary_v2_to_rows(self, summary_v2):
+        """
+        Flatten the summary dict to a single CSV row with band columns.
+        """
+        row = {k:v for k,v in summary_v2.items() if k not in ('bands',)}
+        for b in summary_v2['bands']:
+            tag = b['band']
+            row[f'{tag}_mean_z']   = b['mean_z']
+            row[f'{tag}_hot_site'] = b['hotspot_site']
+            row[f'{tag}_hot_z']    = b['hotspot_z']
+            row[f'{tag}_class']    = b['class']
+        return row
+
+    def build_compact_metrics(self, z_score_df, top_n_per_subject=25, z_min=1.5):
+        """
+        Return a compact DataFrame of only meaningful rows (|z| >= z_min), 
+        sorted by severity, limited per subject.
+        """
+        if z_score_df.empty:
+            return z_score_df
+
+        df = z_score_df.copy()
+        df['abs_z'] = df['z_score'].abs()
+        df = df[df['abs_z'] >= z_min].sort_values(['subject_id','abs_z'], ascending=[True, False])
+
+        # Take top N per subject if requested
+        if top_n_per_subject is not None:
+            df = df.groupby('subject_id', group_keys=False).head(int(top_n_per_subject))
+
+        # Keep only columns that exist in the DataFrame
+        base_keep = ['subject_id','condition','age','sex','age_group','frequency_band','z_score','classification']
+        optional_keep = ['electrode','raw_power','normative_mean','normative_std','pair','asymmetry','coherence']
+        
+        keep = base_keep + [col for col in optional_keep if col in df.columns]
+        return df[keep]
+
+    def build_compact_coherence(self, coh_df, top_n=25, z_min=1.5):
+        """
+        Return a compact DataFrame of only abnormal coherence pairs (|z| >= z_min), 
+        sorted by severity, limited per subject.
+        """
+        if coh_df.empty:
+            return coh_df
+
+        df = coh_df.copy()
+        df['abs_z'] = df['z_score'].abs()
+        df = df[df['abs_z'] >= z_min].sort_values(['subject_id','abs_z'], ascending=[True, False])
+
+        # Take top N per subject if requested
+        if top_n is not None:
+            df = df.groupby('subject_id', group_keys=False).head(int(top_n))
+
+        return df
+
+    def save_summary_cards(self, output_path, clinical_summary_v2_df):
+        """Save individual markdown summary cards for each subject"""
+        op = Path(output_path)
+        op.mkdir(exist_ok=True)
+        for _, row in clinical_summary_v2_df.iterrows():
+            sid = row['subject_id']
+            fn = op / f"{sid}_clinical_summary_v2.md"
+            lines = [
+                f"# Clinical Summary v2 — {sid}",
+                f"- Condition: **{row['condition']}**   |   Age: **{row['age']}**   |   Sex: **{row['sex']}**   |   Age Group: **{row['age_group']}**",
+                "",
+                f"**Headline:** {row['headline']}",
+                "",
+                f"**Global Abnormal Load:**  ≥1.5σ: **{row['n_sites_ge_1p5']}**,  ≥2.0σ: **{row['n_sites_ge_2p0']}**,  ≥2.58σ: **{row['n_sites_ge_2p58']}**",
+                "",
+                f"**Peak:** |z|={abs(row['peak_z']):.2f} at **{row['peak_site']}** (**{row['peak_band']}**)",
+                "",
+                f"**PAF:** z={row['paf_z_mean']:.2f}  →  *{row['paf_class']}*",
+                f"**Theta/Beta @ Cz:** value={row['theta_beta_Cz']:.2f}, z={row['theta_beta_Cz_z']:.2f}  →  *{row['theta_beta_Cz_class']}*",
+                "",
+                "## Band Highlights"
+            ]
+            for b in self._band_order():
+                if f'{b}_mean_z' in row:
+                    lines.append(
+                        f"- **{b.title()}**: mean z={row[f'{b}_mean_z']:.2f}  "
+                        f"| hotspot: {row.get(f'{b}_hot_site', '')} "
+                        f"(z={row.get(f'{b}_hot_z', float('nan')):.2f})  →  *{row.get(f'{b}_class','')}*"
+                    )
+            fn.write_text("\n".join(lines), encoding='utf-8')
+        print(f"✅ Saved {len(clinical_summary_v2_df)} clinical summary cards")
+
+    # ==================== ADVANCED QEEG FEATURES ====================
+    # Gunkelman, Swingle, Soutar-style clinical markers
+    
+    # -------------------- ASYMMETRY METRICS --------------------
+    def compute_asymmetry(self, band_powers):
+        """
+        Compute left-right asymmetry indices for major homologous pairs.
+        Asymmetry = (Right - Left) / (Right + Left)
+        Returns dict: band -> dict of pair -> value
+        
+        Key pairs for clinical interpretation:
+        - Fp2-Fp1: Frontal asymmetry (approach/withdrawal)
+        - F4-F3: Alpha asymmetry (depression/anxiety marker)
+        - C4-C3: Motor/sensory asymmetry
+        - P4-P3: Parietal asymmetry (spatial processing)
+        - O2-O1: Occipital asymmetry (visual processing)
+        - T6-T5: Temporal asymmetry (language/memory)
+        """
+        pairs = [
+            ("Fp1", "Fp2"), ("F3", "F4"), ("C3", "C4"),
+            ("P3", "P4"), ("O1", "O2"), ("T5", "T6")
+        ]
+        out = {band: {} for band in band_powers.keys()}
+        
+        for band, vals in band_powers.items():
+            for (L, R) in pairs:
+                if L in self.electrodes and R in self.electrodes:
+                    iL, iR = self.electrodes.index(L), self.electrodes.index(R)
+                    num = vals[iR] - vals[iL]
+                    den = vals[iR] + vals[iL] + 1e-12
+                    asymm_val = num / den
+                    out[band][f"{R}-{L}"] = float(asymm_val)
+        
+        return out
+
+    # -------------------- COHERENCE SUPPORT --------------------
+    def _all_pairs(self):
+        """Upper-triangular channel pairs in 10-20 order."""
+        pairs = []
+        for i, a in enumerate(self.electrodes):
+            for j in range(i+1, len(self.electrodes)):
+                pairs.append((a, self.electrodes[j], i, j))
+        return pairs  # (chA, chB, i, j)
+
+    def compute_coherence_spectra(self, Mcross_gsf):
+        """
+        Compute magnitude-squared coherence for each frequency.
+        Mcross_gsf: array (nd, nd, nf) complex cross-spectral matrices.
+        Returns: coh (nf, nd, nd) real in [0,1]
+        """
+        nd, _, nf = Mcross_gsf.shape
+        coh = np.zeros((nf, nd, nd), float)
+        
+        for k in range(nf):
+            R = Mcross_gsf[:, :, k]  # (nd, nd) complex cross-spectral matrix for freq k
+            
+            # Get diagonal power for this frequency
+            Sxx = np.real(np.diag(R))  # (nd,) - power at each channel
+            
+            # Compute coherence matrix
+            num = np.abs(R) ** 2  # (nd, nd) - squared magnitude
+            den = np.outer(Sxx, Sxx) + 1e-12  # (nd, nd) - outer product of powers
+            
+            C = num / den
+            # Set diagonal to 1 (coherence of a signal with itself)
+            np.fill_diagonal(C, 1.0)
+            coh[k] = np.clip(np.real(C), 0.0, 1.0)
+            
+        return coh  # (nf, nd, nd)
+
+    def band_coherence(self, coh_spectra):
+        """
+        Average coherence within each clinical band.
+        Returns dict: band -> vector of length n_pairs following _all_pairs() order.
+        """
+        nf = coh_spectra.shape[0]
+        out = {}
+        freq = self.frequencies  # (nf,)
+        pairs = self._all_pairs()
+        
+        for band, (lo, hi) in self.clinical_bands.items():
+            idx = np.where((freq >= lo) & (freq <= hi))[0]
+            if idx.size == 0:
+                out[band] = np.full(len(pairs), np.nan)
+                continue
+            # mean across band bins
+            Cmean = np.nanmean(coh_spectra[idx], axis=0)  # (nd, nd)
+            vec = []
+            for _, _, i, j in pairs:
+                vec.append(float(Cmean[i, j]))
+            out[band] = np.array(vec, float)
+        return out  # band -> (n_pairs,)
+
+    # -------------------- PEAK FREQUENCY --------------------
+    def compute_alpha_peak(self, power_spectra, freq):
+        """
+        Estimate individual alpha peak frequency from posterior sites.
+        Returns scalar (Hz).
+        
+        Clinical significance:
+        - Normal IAF: 9-11 Hz in adults
+        - Slow IAF (<8.5 Hz): Cognitive decline, depression
+        - Fast IAF (>12 Hz): Anxiety, hyperarousal
+        """
+        posterior = [ch for ch in ["O1", "O2", "P3", "P4", "Pz"] if ch in self.electrodes]
+        if not posterior:
+            return np.nan
+            
+        idxs = [self.electrodes.index(ch) for ch in posterior]
+        # Restrict to 7–13 Hz for alpha peak detection
+        band_idx = np.where((freq >= 7) & (freq <= 13))[0]
+        if band_idx.size == 0:
+            return np.nan
+            
+        band_pow = np.mean(power_spectra[idxs][:, band_idx], axis=0)  # avg over sites
+        if band_pow.size == 0:
+            return np.nan
+            
+        peak_idx = band_idx[np.argmax(band_pow)]
+        return float(freq[peak_idx])
+
+    def classify_coh_z(self, z):
+        """Reuse standard z-score classification for coherence"""
+        return self.classify_abnormality(z)
     
     def create_clinical_summary(self, subject_id, subject_data, z_scores):
         """Create clinical summary for a subject"""
@@ -456,12 +900,18 @@ class CubanEEGProcessor:
         """Create comprehensive z-score tables for all subjects"""
         if len(self.subjects_data) == 0:
             print("⚠️ No subjects processed, returning empty tables")
-            return pd.DataFrame(), pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             
         print("📋 Creating z-score tables...")
         
         z_score_data = []
         clinical_summaries = []
+        clinical_summaries_v2 = []   # NEW
+        
+        # NEW: Advanced QEEG feature tables
+        asymmetry_rows = []
+        alpha_peak_rows = []
+        coherence_rows = []
         
         for subject_id, subject_data in self.subjects_data.items():
             # Determine condition from subject ID
@@ -472,9 +922,13 @@ class CubanEEGProcessor:
             if z_scores is None:
                 continue
             
-            # Create clinical summary
+            # existing v1 (kept)
             clinical_summary = self.create_clinical_summary(subject_id, subject_data, z_scores)
             clinical_summaries.append(clinical_summary)
+
+            # NEW: v2 summary
+            sum_v2 = self.build_clinical_summary_v2(subject_id, subject_data, z_scores)
+            clinical_summaries_v2.append(self.clinical_summary_v2_to_rows(sum_v2))
             
             # Create row for each electrode and frequency band
             for i, electrode in enumerate(self.electrodes):
@@ -494,15 +948,78 @@ class CubanEEGProcessor:
                             'normative_mean': self.normative_data[z_scores['age_group']]['band_powers_mean'][band][i],
                             'normative_std': self.normative_data[z_scores['age_group']]['band_powers_std'][band][i]
                         })
+            
+            # NEW: Collect advanced QEEG features
+            # Asymmetry rows
+            if 'z_scores_asymmetry' in z_scores and z_scores['z_scores_asymmetry']:
+                asymm_pairs = list(subject_data['asymmetry'][list(subject_data['asymmetry'].keys())[0]].keys())
+                for band, zvec in z_scores['z_scores_asymmetry'].items():
+                    for pair_name, z in zip(asymm_pairs, zvec):
+                        asymmetry_rows.append({
+                            'subject_id': subject_id,
+                            'condition': condition,
+                            'age': subject_data['age'],
+                            'sex': 'Male' if subject_data['sex'] == 1 else 'Female',
+                            'age_group': z_scores['age_group'],
+                            'pair': pair_name,
+                            'frequency_band': band,
+                            'asymmetry': subject_data['asymmetry'][band][pair_name],
+                            'z_score': z,
+                            'classification': self.classify_abnormality(z)
+                        })
+            
+            # Alpha peak row
+            alpha_peak_rows.append({
+                'subject_id': subject_id,
+                'condition': condition,
+                'age': subject_data['age'],
+                'sex': 'Male' if subject_data['sex'] == 1 else 'Female',
+                'age_group': z_scores['age_group'],
+                'alpha_peak_hz': subject_data['alpha_peak_hz'],
+                'z_score': z_scores['alpha_peak_z'],
+                'classification': self.classify_abnormality(z_scores['alpha_peak_z']) if np.isfinite(z_scores['alpha_peak_z']) else 'Unknown'
+            })
+            
+            # Coherence rows
+            if 'z_scores_coherence' in z_scores and z_scores['z_scores_coherence']:
+                if z_scores['age_group'] in self.normative_data and 'coherence_pairs' in self.normative_data[z_scores['age_group']]:
+                    pairs = self.normative_data[z_scores['age_group']]['coherence_pairs']
+                    for band, zvec in z_scores['z_scores_coherence'].items():
+                        for (chA, chB), z in zip(pairs, zvec):
+                            # Find the coherence value
+                            pair_idx = pairs.index((chA, chB))
+                            coherence_val = subject_data['band_coherence'][band][pair_idx]
+                            coherence_rows.append({
+                                'subject_id': subject_id,
+                                'condition': condition,
+                                'age': subject_data['age'],
+                                'sex': 'Male' if subject_data['sex'] == 1 else 'Female',
+                                'age_group': z_scores['age_group'],
+                                'pair': f'{chA}-{chB}',
+                                'frequency_band': band,
+                                'coherence': coherence_val,
+                                'z_score': z,
+                                'classification': self.classify_coh_z(z)
+                            })
         
-        # Create DataFrames
+        # DataFrames
         z_score_df = pd.DataFrame(z_score_data)
         clinical_summary_df = pd.DataFrame(clinical_summaries)
+        clinical_summary_v2_df = pd.DataFrame(clinical_summaries_v2)  # NEW
+        
+        # NEW: Advanced QEEG DataFrames
+        asymmetry_df = pd.DataFrame(asymmetry_rows)
+        alpha_peak_df = pd.DataFrame(alpha_peak_rows)
+        coherence_df = pd.DataFrame(coherence_rows)
         
         print(f"✅ Created z-score table with {len(z_score_df)} rows")
         print(f"✅ Created clinical summary with {len(clinical_summary_df)} subjects")
+        print(f"✅ Created clinical summary v2 with {len(clinical_summary_v2_df)} subjects")
+        print(f"✅ Created asymmetry table with {len(asymmetry_df)} rows")
+        print(f"✅ Created alpha peak table with {len(alpha_peak_df)} rows")
+        print(f"✅ Created coherence table with {len(coherence_df)} rows")
         
-        return z_score_df, clinical_summary_df
+        return z_score_df, clinical_summary_df, clinical_summary_v2_df, asymmetry_df, alpha_peak_df, coherence_df
     
     def save_database(self, output_path="eeg_paradox_database"):
         """Save all processed data and tables"""
@@ -511,14 +1028,44 @@ class CubanEEGProcessor:
         
         print(f" Saving database to {output_path}...")
         
-        # Save z-score table
-        z_score_df, clinical_summary_df = self.create_z_score_tables()
+        # Save z-score table + both summaries + advanced QEEG features
+        z_score_df, clinical_summary_df, clinical_summary_v2_df, asymmetry_df, alpha_peak_df, coherence_df = self.create_z_score_tables()
         z_score_df.to_csv(output_path / "z_scores_table.csv", index=False)
         z_score_df.to_excel(output_path / "z_scores_table.xlsx", index=False)
         
         # Save clinical summary
         clinical_summary_df.to_csv(output_path / "clinical_summary.csv", index=False)
         clinical_summary_df.to_excel(output_path / "clinical_summary.xlsx", index=False)
+
+        clinical_summary_v2_df.to_csv(output_path / "clinical_summary_v2.csv", index=False)
+        clinical_summary_v2_df.to_excel(output_path / "clinical_summary_v2.xlsx", index=False)
+
+        # NEW: compact clinical metrics (|z| >= 1.5, top 25 per subject)
+        compact_df = self.build_compact_metrics(z_score_df, top_n_per_subject=25, z_min=1.5)
+        compact_df.to_csv(output_path / "clinical_metrics_compact.csv", index=False)
+        compact_df.to_excel(output_path / "clinical_metrics_compact.xlsx", index=False)
+        
+        # Save individual summary cards
+        self.save_summary_cards(output_path, clinical_summary_v2_df)
+        
+        # NEW: Save advanced QEEG features
+        asymmetry_df.to_csv(output_path / "asymmetry_table.csv", index=False)
+        asymmetry_df.to_excel(output_path / "asymmetry_table.xlsx", index=False)
+        
+        alpha_peak_df.to_csv(output_path / "alpha_peak_table.csv", index=False)
+        alpha_peak_df.to_excel(output_path / "alpha_peak_table.xlsx", index=False)
+        
+        coherence_df.to_csv(output_path / "coherence_table.csv", index=False)
+        coherence_df.to_excel(output_path / "coherence_table.xlsx", index=False)
+        
+        # Compact versions for clinical use
+        asymmetry_compact = self.build_compact_metrics(asymmetry_df, top_n_per_subject=15, z_min=1.5)
+        asymmetry_compact.to_csv(output_path / "asymmetry_compact.csv", index=False)
+        asymmetry_compact.to_excel(output_path / "asymmetry_compact.xlsx", index=False)
+        
+        coherence_compact = self.build_compact_coherence(coherence_df, top_n=20, z_min=1.5)
+        coherence_compact.to_csv(output_path / "coherence_compact.csv", index=False)
+        coherence_compact.to_excel(output_path / "coherence_compact.xlsx", index=False)
         
         # Save normative data
         normative_summary = []
@@ -541,8 +1088,14 @@ class CubanEEGProcessor:
         np.save(output_path / "subjects_data.npy", self.subjects_data)
         
         print("✅ Database saved successfully!")
+        print(f"📊 Clinical Summary v2: {len(clinical_summary_v2_df)} subjects")
+        print(f"📋 Compact Metrics: {len(compact_df)} significant findings (|z|≥1.5)")
+        print(f"🧠 Advanced QEEG Features:")
+        print(f"   - Asymmetry: {len(asymmetry_df)} measurements, {len(asymmetry_compact)} significant")
+        print(f"   - Alpha Peak: {len(alpha_peak_df)} subjects")
+        print(f"   - Coherence: {len(coherence_df)} pairs, {len(coherence_compact)} significant")
         
-        return z_score_df, clinical_summary_df, normative_df
+        return z_score_df, clinical_summary_df, clinical_summary_v2_df, asymmetry_df, alpha_peak_df, coherence_df, normative_df
     
     def create_clinical_visualizations(self, output_path="eeg_paradox_database"):
         """Create clinical QEEG visualizations"""
@@ -728,7 +1281,7 @@ class CubanEEGProcessor:
 def main():
     """Main processing function"""
     print("🚀 EEG Paradox Rapid Reporter - Clinical QEEG Database Processor")
-    print("Enhanced for Jay Gunkelman & Mark Jones & Gattis Clinical Standards")
+    print("Enhanced for Jay Gunkelman & Mark Jones Clinical Standards")
     print("=" * 80)
     
     # Initialize processor
@@ -741,7 +1294,7 @@ def main():
     processor.create_normative_database()
     
     # Save database and create tables
-    z_score_df, clinical_summary_df, normative_df = processor.save_database()
+    z_score_df, clinical_summary_df, clinical_summary_v2_df, asymmetry_df, alpha_peak_df, coherence_df, normative_df = processor.save_database()
     
     # Create visualizations
     processor.create_visualizations()
@@ -754,15 +1307,24 @@ def main():
     print(f"Total subjects processed: {len(processor.subjects_data)}")
     print(f"Age groups created: {len(processor.normative_data)}")
     print(f"Z-score table rows: {len(z_score_df)}")
-    print(f"Clinical summaries: {len(clinical_summary_df)}")
+    print(f"Clinical summaries v1: {len(clinical_summary_df)}")
+    print(f"Clinical summaries v2: {len(clinical_summary_v2_df)}")
     print(f"Electrodes: {len(processor.electrodes)}")
     print(f"Frequency bands: {list(processor.freq_bands.keys())}")
     print(f"Clinical metrics: Peak Alpha Frequency, Theta/Beta Ratio, Beta/Alpha Ratio")
+    print(f"Advanced QEEG features:")
+    print(f"  - Hemispheric asymmetry: {len(asymmetry_df)} measurements")
+    print(f"  - Alpha peak frequency: {len(alpha_peak_df)} subjects")
+    print(f"  - Coherence analysis: {len(coherence_df)} channel pairs")
     
     if len(processor.subjects_data) > 0:
         print("\n🎯 Clinical QEEG Features Added:")
         print("✅ Peak Alpha Frequency (PAF) analysis")
         print("✅ Theta/Beta ratio (ADHD biomarker)")
+        print("✅ Hemispheric asymmetry analysis (Gunkelman/Swingle standard)")
+        print("✅ Coherence analysis (connectivity patterns)")
+        print("✅ Clinical Summary v2 (actionable reports)")
+        print("✅ Compact metrics (only significant findings)")
         print("✅ Beta/Alpha ratio (arousal index)")
         print("✅ Alpha asymmetry calculations")
         print("✅ Clinical abnormality classifications")
@@ -781,5 +1343,4 @@ def main():
     return processor, z_score_df, clinical_summary_df, normative_df
 
 if __name__ == "__main__":
-
     processor, z_scores, clinical_summary, normative = main()
